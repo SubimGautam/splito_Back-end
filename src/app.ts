@@ -9,31 +9,26 @@ import expenseRoutes from "./routes/expense.route";
 import groupRoutes from "./routes/group.route";
 import settlementRoutes from './routes/settlement.route';
 import adminRoutes from './routes/admin.route';
-console.log('✅ Auth routes loaded');
-console.log('✅ User routes loaded'); 
-console.log('✅ Dashboard routes loaded');
-console.log('✅ Expense routes loaded');
-console.log('✅ Group routes loaded:', !!groupRoutes);
 
 dotenv.config();
 const app = express();
 
-// Middleware
+// ✅ FIX 1: Updated CORS to allow your phone's IP
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: ["http://localhost:3000", "http://192.168.1.115:3000"], // Add your phone's network
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/settlements', settlementRoutes);
 app.use('/uploads', express.static('uploads'));
-app.use('/api/admin', adminRoutes);
 
+// Test route (before MongoDB connection)
 app.get('/api/test-direct', (req, res) => {
   res.json({ message: 'Direct test route works!' });
 });
 
-// MongoDB connection with better options
+// MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
@@ -42,19 +37,15 @@ if (!MONGODB_URI) {
 }
 
 console.log('🔄 Connecting to MongoDB...');
-console.log("Using this MongoDB URI:", process.env.MONGODB_URI);
 mongoose.connect(MONGODB_URI, {
-  serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 })
 .then(() => {
   console.log('✅ MongoDB connected successfully');
-  console.log(`📊 Database: ${mongoose.connection.name}`);
-  console.log(`🌍 Host: ${mongoose.connection.host}`);
 })
 .catch((err) => {
-  console.error('❌ MongoDB connection error:');
-  console.error(err);
+  console.error('❌ MongoDB connection error:', err);
   process.exit(1);
 });
 
@@ -69,17 +60,19 @@ mongoose.connection.on('disconnected', () => {
 
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
-  console.log('MongoDB connection closed through app termination');
+  console.log('MongoDB connection closed');
   process.exit(0);
 });
 
-// Import routes
+// Routes
 console.log('🔄 Loading routes...');
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/settlements', settlementRoutes);
+app.use('/api/admin', adminRoutes);
 console.log('✅ Routes loaded');
 
 // Health check
@@ -107,9 +100,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Test: http://localhost:${PORT}/api/test`);
+// ✅ FIX 2: Listen on all network interfaces
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+const HOST = '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  console.log(`📡 Local: http://localhost:${PORT}/api/test`);
+  console.log(`🌐 Network: http://192.168.1.115:${PORT}/api/health`);
   console.log(`💊 Health: http://localhost:${PORT}/api/health`);
 });
