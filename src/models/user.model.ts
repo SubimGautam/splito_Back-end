@@ -1,11 +1,16 @@
 import { Schema, model, Document } from "mongoose";
 
-interface IUser extends Document {
+export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
   role: string;
-  profileImage? : string;
+  profileImage?: string;
+  resetCode?: string;        // 6-digit code
+  resetCodeExpires?: Date;   // Expiry time
+  bio?: string;
+  phone?: string;
+  location?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,16 +42,25 @@ const userSchema = new Schema<IUser>(
       default: "user",
     },
     profileImage: {
-    type: String,
-    default: null,
+      type: String,
+      default: null,
     },
-
+    resetCode: { 
+      type: String, 
+      default: null 
+    },
+    resetCodeExpires: { 
+      type: Date, 
+      default: null 
+    },
+    bio: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    location: { type: String, default: '' },
   },
   { 
     timestamps: true,
     toJSON: {
       transform: function(doc, ret) {
-        // Destructure to remove properties and keep the rest
         const { password, __v, ...rest } = ret;
         return rest;
       }

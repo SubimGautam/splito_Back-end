@@ -15,7 +15,6 @@ export class AuthController {
     });
 
     try {
-      // Validate request body
       const data = RegisterDto.parse(req.body);
       console.log("✅ Data validated successfully");
 
@@ -27,7 +26,6 @@ export class AuthController {
 
       console.log("✅ Registration successful in service");
 
-      // Return success response
       res.status(201).json({
         success: true,
         message: "Registration successful",
@@ -40,7 +38,6 @@ export class AuthController {
     } catch (err: any) {
       console.error("❌ Registration error:", err);
       
-      // Handle validation errors from Zod
       if (err.errors) {
         return res.status(400).json({ 
           success: false,
@@ -49,7 +46,6 @@ export class AuthController {
         });
       }
       
-      // Handle duplicate email or other errors
       res.status(400).json({ 
         success: false,
         message: err.message || "Registration failed" 
@@ -74,7 +70,6 @@ export class AuthController {
 
       console.log("✅ Login successful");
       
-      // Return success response
       res.json({
         success: true,
         message: "Login successful",
@@ -98,6 +93,67 @@ export class AuthController {
       res.status(401).json({ 
         success: false,
         message: err.message || "Login failed" 
+      });
+    }
+  }
+
+  // New: Forgot password
+  async forgotPassword(req: Request, res: Response) {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Email is required" 
+        });
+      }
+
+      await authService.forgotPassword(email);
+      
+      // Always return success even if email not found (security)
+      res.json({ 
+        success: true, 
+        message: "If that email exists, a reset link has been sent." 
+      });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Server error" 
+      });
+    }
+  }
+
+  // New: Reset password
+  async resetPassword(req: Request, res: Response) {
+    try {
+      const { token, email, password, confirmPassword } = req.body;
+      
+      if (!token || !email || !password || !confirmPassword) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "All fields are required" 
+        });
+      }
+
+      if (password !== confirmPassword) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Passwords do not match" 
+        });
+      }
+
+      await authService.resetPassword(token, email, password);
+      
+      res.json({ 
+        success: true, 
+        message: "Password reset successful" 
+      });
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      res.status(400).json({ 
+        success: false, 
+        message: error.message || "Reset failed" 
       });
     }
   }

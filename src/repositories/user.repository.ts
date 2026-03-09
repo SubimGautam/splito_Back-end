@@ -1,18 +1,6 @@
-import User from "../models/user.model";
-
-export interface IUser {
-  _id: any;
-  username: string;
-  email: string;
-  password: string;
-  role: string;
-  profileImage?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+import User, { IUser } from "../models/user.model";
 
 export class UserRepository {
-  // ✅ CRITICAL: Make sure this method exists exactly like this
   async findByEmail(email: string): Promise<IUser | null> {
     try {
       console.log(`🔍 UserRepository.findByEmail searching for: ${email}`);
@@ -66,5 +54,30 @@ export class UserRepository {
       console.error("❌ Error updating profile image:", error);
       throw error;
     }
+  }
+
+  // New methods for password reset
+  async setResetToken(userId: string, tokenHash: string, expires: Date): Promise<void> {
+    await User.findByIdAndUpdate(userId, {
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: expires
+    });
+  }
+
+  async findByResetToken(tokenHash: string, email: string): Promise<IUser | null> {
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+    return user ? user.toObject() as IUser : null;
+  }
+
+  async updatePassword(userId: string, hashedPassword: string): Promise<void> {
+    await User.findByIdAndUpdate(userId, {
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null
+    });
   }
 }

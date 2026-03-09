@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { UserRepository } from "../repositories/user.repository";
 import { generateToken } from "../utils/jwt";
+import { sendResetCode } from "../utils/email";
 
-// ✅ Make sure this is instantiated correctly
 const userRepo = new UserRepository();
 
 export class AuthService {
@@ -11,23 +12,16 @@ export class AuthService {
     console.log(`   - Username: ${username}`);
     console.log(`   - Email: ${email}`);
     
-    // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
     
-    console.log(`🔍 Checking if user exists: ${normalizedEmail}`);
-    
-    // ✅ This should work if findByEmail is properly implemented
     const existingUser = await userRepo.findByEmail(normalizedEmail);
-    
     if (existingUser) {
       console.log(`❌ User already exists: ${normalizedEmail}`);
       throw new Error("Email already exists");
     }
 
-    console.log(`🔍 Hashing password...`);
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log(`🔍 Creating user in database...`);
     const user = await userRepo.create({
       username: username.trim(),
       email: normalizedEmail,
@@ -40,8 +34,6 @@ export class AuthService {
       userId: user._id,
       role: user.role || 'user',
     });
-
-    console.log(`🔑 Token generated for user: ${user._id}`);
 
     return { 
       token,
@@ -58,37 +50,24 @@ export class AuthService {
     console.log("🔍 AuthService.login called");
     console.log(`   - Email: ${email}`);
     
-    // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
     
-    console.log(`🔍 Finding user by email: ${normalizedEmail}`);
-    
-    // ✅ This is where the error happens
     const user = await userRepo.findByEmail(normalizedEmail);
-    
     if (!user) {
       console.log(`❌ No user found with email: ${normalizedEmail}`);
       throw new Error("Invalid credentials");
     }
 
-    console.log(`✅ User found: ${user.email}`);
-    console.log(`🔍 Comparing passwords...`);
-    
     const isMatch = await bcrypt.compare(password, user.password);
-    
     if (!isMatch) {
       console.log(`❌ Password mismatch for: ${normalizedEmail}`);
       throw new Error("Invalid credentials");
     }
 
-    console.log(`✅ Login successful for: ${normalizedEmail}`);
-    
     const token = generateToken({
       userId: user._id,
       role: user.role || 'user',
     });
-
-    console.log(`🔑 Token generated: ${token.substring(0, 20)}...`);
 
     return { 
       token,
@@ -99,5 +78,49 @@ export class AuthService {
         role: user.role || 'user'
       }
     };
+  }
+
+  // New: Forgot password
+  async forgotPassword(email: string): Promise<void> {
+    console.log("🔍 AuthService.forgotPassword called");
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await userRepo.findByEmail(normalizedEmail);
+    if (!user) {
+      // For security, don't reveal if email exists
+      console.log(`No user found with email: ${normalizedEmail}`);
+      return;
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    // Save hashed token and expiry
+    await userRepo.setResetToken(user._id.toString(), resetTokenHash, resetExpires);
+
+    // Send email with reset link (custom scheme for deep linking)
+    const resetLink = `splito://reset-password?token=${resetToken}&email=${normalizedEmail}`;
+    await sendResetCode(normalizedEmail, resetLink);
+    console.log(`✅ Reset email sent to ${normalizedEmail}`);
+  }
+
+  // New: Reset password
+  async resetPassword(token: string, email: string, newPassword: string): Promise<void> {
+    console.log("🔍 AuthService.resetPassword called");
+    const normalizedEmail = email.toLowerCase().trim();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await userRepo.findByResetToken(tokenHash, normalizedEmail);
+    if (!user) {
+      throw new Error("Invalid or expired reset token");
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset fields
+    await userRepo.updatePassword(user._id.toString(), hashedPassword);
+    console.log(`✅ Password reset successful for ${normalizedEmail}`);
   }
 }
